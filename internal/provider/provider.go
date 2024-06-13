@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -15,16 +16,55 @@ import (
 	"github.com/mackerelio-labs/terraform-provider-mackerel/internal/validatorutil"
 )
 
-type mackerelProvider struct{}
+type mackerelProvider struct {
+	config MackerelProviderConfig
+}
+type MackerelProviderConfig struct {
+	// if nil, all components are enabled
+	enabledResourceTypes    []string
+	disabledResourceTypes   []string
+	enabledDataSourceTypes  []string
+	disabledDataSourceTypes []string
+}
+type MackerelProviderOption func(*MackerelProviderConfig)
+
+func WithResourceEnabled(types ...string) MackerelProviderOption {
+	return func(mpc *MackerelProviderConfig) {
+		mpc.enabledResourceTypes = append(mpc.enabledResourceTypes, types...)
+	}
+}
+func WithResourceDisabled(types ...string) MackerelProviderOption {
+	return func(mpc *MackerelProviderConfig) {
+		mpc.disabledResourceTypes = append(mpc.disabledResourceTypes, types...)
+	}
+}
+func WithDataSourceEnabled(types ...string) MackerelProviderOption {
+	return func(mpc *MackerelProviderConfig) {
+		mpc.enabledDataSourceTypes = append(mpc.enabledDataSourceTypes, types...)
+	}
+}
+func WithDataSourceDisabled(types ...string) MackerelProviderOption {
+	return func(mpc *MackerelProviderConfig) {
+		mpc.disabledDataSourceTypes = append(mpc.disabledDataSourceTypes, types...)
+	}
+}
+
+const providerTypeName = "mackerel"
 
 var _ provider.Provider = (*mackerelProvider)(nil)
 
-func New() provider.Provider {
-	return &mackerelProvider{}
+func New(opts ...MackerelProviderOption) provider.Provider {
+	var config MackerelProviderConfig
+	for _, opt := range opts {
+		opt(&config)
+	}
+	return &mackerelProvider{
+		config: config,
+	}
 }
 
 func (m *mackerelProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
-	resp.TypeName = "mackerel"
+	resp.TypeName = providerTypeName
 }
 
 func (m *mackerelProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
@@ -81,16 +121,60 @@ func (m *mackerelProvider) Configure(ctx context.Context, req provider.Configure
 	resp.DataSourceData = client
 }
 
-func (m *mackerelProvider) Resources(context.Context) []func() resource.Resource {
-	return []func() resource.Resource{
+func (m *mackerelProvider) Resources(ctx context.Context) []func() resource.Resource {
+	factories := []func() resource.Resource{
 		NewMackerelServiceResource,
 	}
+	if m.config.enabledResourceTypes == nil && m.config.disabledResourceTypes == nil {
+		return factories
+	}
+
+	filteredFactories := make([]func() resource.Resource, 0, len(factories))
+	for _, f := range factories {
+		req := resource.MetadataRequest{ProviderTypeName: providerTypeName}
+		resp := resource.MetadataResponse{}
+		f().Metadata(ctx, req, &resp)
+
+		enabled := true
+		if m.config.enabledResourceTypes != nil {
+			enabled = enabled && slices.Contains(m.config.enabledResourceTypes, resp.TypeName)
+		}
+		if m.config.disabledResourceTypes != nil {
+			enabled = enabled && !slices.Contains(m.config.disabledResourceTypes, resp.TypeName)
+		}
+		if enabled {
+			filteredFactories = append(filteredFactories, f)
+		}
+	}
+	return filteredFactories
 }
 
-func (m *mackerelProvider) DataSources(context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{
+func (m *mackerelProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
+	factories := []func() datasource.DataSource{
 		NewMackerelServiceDataSource,
 	}
+	if m.config.enabledDataSourceTypes == nil && m.config.disabledDataSourceTypes == nil {
+		return factories
+	}
+
+	filteredFactories := make([]func() datasource.DataSource, 0, len(factories))
+	for _, f := range factories {
+		req := datasource.MetadataRequest{ProviderTypeName: providerTypeName}
+		resp := datasource.MetadataResponse{}
+		f().Metadata(ctx, req, &resp)
+
+		enabled := true
+		if m.config.enabledDataSourceTypes != nil {
+			enabled = enabled && slices.Contains(m.config.enabledDataSourceTypes, resp.TypeName)
+		}
+		if m.config.disabledDataSourceTypes != nil {
+			enabled = enabled && !slices.Contains(m.config.disabledDataSourceTypes, resp.TypeName)
+		}
+		if enabled {
+			filteredFactories = append(filteredFactories, f)
+		}
+	}
+	return filteredFactories
 }
 
 func retrieveClient(_ context.Context, providerData any) (client *mackerel.Client, diags diag.Diagnostics) {

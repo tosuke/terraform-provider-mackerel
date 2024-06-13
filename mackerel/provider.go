@@ -15,8 +15,68 @@ import (
 	mackerelfwprovider "github.com/mackerelio-labs/terraform-provider-mackerel/internal/provider"
 )
 
+type providerConfig struct {
+	disabledResourceTypes   []string
+	disabledDataSourceTypes []string
+}
+type ProviderOpt func(*providerConfig)
+
+func WithResourceDisabled(types ...string) ProviderOpt {
+	return func(pc *providerConfig) {
+		pc.disabledResourceTypes = append(pc.disabledResourceTypes, types...)
+	}
+}
+func WithDataSourceDisabled(types ...string) ProviderOpt {
+	return func(pc *providerConfig) {
+		pc.disabledDataSourceTypes = append(pc.disabledDataSourceTypes, types...)
+	}
+}
+
 // Provider returns a *schema.Provider
-func Provider() *schema.Provider {
+func Provider(opts ...ProviderOpt) *schema.Provider {
+	var config providerConfig
+	for _, opt := range opts {
+		opt(&config)
+	}
+
+	resourcesMap := map[string]*schema.Resource{
+		"mackerel_alert_group_setting": resourceMackerelAlertGroupSetting(),
+		"mackerel_aws_integration":     resourceMackerelAWSIntegration(),
+		"mackerel_channel":             resourceMackerelChannel(),
+		"mackerel_downtime":            resourceMackerelDowntime(),
+		"mackerel_dashboard":           resourceMackerelDashboard(),
+		"mackerel_monitor":             resourceMackerelMonitor(),
+		"mackerel_notification_group":  resourceMackerelNotificationGroup(),
+		"mackerel_role":                resourceMackerelRole(),
+		"mackerel_role_metadata":       resourceMackerelRoleMetadata(),
+		"mackerel_service":             resourceMackerelService(),
+		"mackerel_service_metadata":    resourceMackerelServiceMetadata(),
+	}
+
+	dataSourcesMap := map[string]*schema.Resource{
+		"mackerel_alert_group_setting":  dataSourceMackerelAlertGroupSetting(),
+		"mackerel_aws_integration":      dataSourceMackerelAWSIntegration(),
+		"mackerel_channel":              dataSourceMackerelChannel(),
+		"mackerel_dashboard":            dataSourceMackerelDashboard(),
+		"mackerel_downtime":             dataSourceMackerelDowntime(),
+		"mackerel_monitor":              dataSourceMackerelMonitor(),
+		"mackerel_notification_group":   dataSourceMackerelNotificationGroup(),
+		"mackerel_role":                 dataSourceMackerelRole(),
+		"mackerel_role_metadata":        dataSourceMackerelRoleMetadata(),
+		"mackerel_service":              dataSourceMackerelService(),
+		"mackerel_service_metadata":     dataSourceMackerelServiceMetadata(),
+		"mackerel_service_metric_names": dataSourceMackerelServiceMetricNames(),
+	}
+	for _, ty := range config.disabledResourceTypes {
+		if _, found := resourcesMap[ty]; found {
+			delete(resourcesMap, ty)
+		}
+	}
+	for _, ty := range config.disabledDataSourceTypes {
+		if _, found := dataSourcesMap[ty]; found {
+			delete(dataSourcesMap, ty)
+		}
+	}
 	return &schema.Provider{
 		Schema: map[string]*schema.Schema{
 			"api_key": {
@@ -39,34 +99,9 @@ func Provider() *schema.Provider {
 			},
 		},
 
-		ResourcesMap: map[string]*schema.Resource{
-			"mackerel_alert_group_setting": resourceMackerelAlertGroupSetting(),
-			"mackerel_aws_integration":     resourceMackerelAWSIntegration(),
-			"mackerel_channel":             resourceMackerelChannel(),
-			"mackerel_downtime":            resourceMackerelDowntime(),
-			"mackerel_dashboard":           resourceMackerelDashboard(),
-			"mackerel_monitor":             resourceMackerelMonitor(),
-			"mackerel_notification_group":  resourceMackerelNotificationGroup(),
-			"mackerel_role":                resourceMackerelRole(),
-			"mackerel_role_metadata":       resourceMackerelRoleMetadata(),
-			"mackerel_service":             resourceMackerelService(),
-			"mackerel_service_metadata":    resourceMackerelServiceMetadata(),
-		},
+		ResourcesMap: resourcesMap,
 
-		DataSourcesMap: map[string]*schema.Resource{
-			"mackerel_alert_group_setting":  dataSourceMackerelAlertGroupSetting(),
-			"mackerel_aws_integration":      dataSourceMackerelAWSIntegration(),
-			"mackerel_channel":              dataSourceMackerelChannel(),
-			"mackerel_dashboard":            dataSourceMackerelDashboard(),
-			"mackerel_downtime":             dataSourceMackerelDowntime(),
-			"mackerel_monitor":              dataSourceMackerelMonitor(),
-			"mackerel_notification_group":   dataSourceMackerelNotificationGroup(),
-			"mackerel_role":                 dataSourceMackerelRole(),
-			"mackerel_role_metadata":        dataSourceMackerelRoleMetadata(),
-			"mackerel_service":              dataSourceMackerelService(),
-			"mackerel_service_metadata":     dataSourceMackerelServiceMetadata(),
-			"mackerel_service_metric_names": dataSourceMackerelServiceMetricNames(),
-		},
+		DataSourcesMap: dataSourcesMap,
 
 		ConfigureContextFunc: providerConfigure,
 	}
