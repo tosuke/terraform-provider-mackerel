@@ -96,10 +96,10 @@ func (m *NotificationGroupModel) Read(ctx context.Context, client *Client) error
 	m.NotificationLevel = data.NotificationLevel // has default
 
 	// optional attrs needs to preserve null on zero values
-	if m.ChildNotificationGroupIDs != nil || len(data.ChildNotificationGroupIDs) > 0 {
+	if len(m.ChildNotificationGroupIDs) > 0 || len(data.ChildNotificationGroupIDs) > 0 {
 		m.ChildNotificationGroupIDs = data.ChildNotificationGroupIDs
 	}
-	if m.ChildChannelIDs != nil || len(data.ChildChannelIDs) > 0 {
+	if len(m.ChildChannelIDs) > 0 || len(data.ChildChannelIDs) > 0 {
 		m.ChildChannelIDs = data.ChildChannelIDs
 	}
 
