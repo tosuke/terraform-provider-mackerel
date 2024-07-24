@@ -6,6 +6,9 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
+	"github.com/hashicorp/terraform-plugin-testing/statecheck"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
 func TestAccDataSourceMackerelNotificationGroup(t *testing.T) {
@@ -19,15 +22,23 @@ func TestAccDataSourceMackerelNotificationGroup(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccDataSourceMackerelNotificationGroupConfig(rand, name),
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(dsName, "id"),
-					resource.TestCheckResourceAttr(dsName, "name", name),
-					resource.TestCheckResourceAttr(dsName, "notification_level", "critical"),
-					resource.TestCheckResourceAttr(dsName, "child_notification_group_ids.#", "1"),
-					resource.TestCheckResourceAttr(dsName, "child_channel_ids.#", "1"),
-					resource.TestCheckResourceAttr(dsName, "monitor.#", "1"),
-					resource.TestCheckResourceAttr(dsName, "service.#", "2"),
-				),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(dsName, tfjsonpath.New("id"), knownvalue.NotNull()),
+					statecheck.ExpectKnownValue(dsName, tfjsonpath.New("name"), knownvalue.StringExact(name)),
+					statecheck.ExpectKnownValue(dsName, tfjsonpath.New("notification_level"), knownvalue.StringExact("critical")),
+					statecheck.ExpectKnownValue(dsName, tfjsonpath.New("child_notification_group_ids"), knownvalue.SetSizeExact(1)),
+					statecheck.ExpectKnownValue(dsName, tfjsonpath.New("child_channel_ids"), knownvalue.SetSizeExact(1)),
+					statecheck.ExpectKnownValue(dsName, tfjsonpath.New("monitor"),
+						knownvalue.SetExact([]knownvalue.Check{knownvalue.ObjectExact(map[string]knownvalue.Check{
+							"id":           knownvalue.NotNull(),
+							"skip_default": knownvalue.Bool(false),
+						})})),
+					statecheck.ExpectKnownValue(dsName, tfjsonpath.New("service"),
+						knownvalue.SetExact([]knownvalue.Check{
+							knownvalue.ObjectExact(map[string]knownvalue.Check{"name": knownvalue.StringExact("tf-service-" + rand)}),
+							knownvalue.ObjectExact(map[string]knownvalue.Check{"name": knownvalue.StringExact("tf-service-" + rand + "-bar")}),
+						})),
+				},
 			},
 		},
 	})

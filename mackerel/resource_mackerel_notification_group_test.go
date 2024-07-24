@@ -6,7 +6,10 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
+	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 	"github.com/mackerelio/mackerel-client-go"
 )
 
@@ -24,28 +27,34 @@ func TestAccMackerelNotificationGroup(t *testing.T) {
 			// Test: Create
 			{
 				Config: testAccMackerelNotificationGroupConfig(name),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckMackerelNotificationGroupExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", name),
-					resource.TestCheckResourceAttr(resourceName, "notification_level", "all"),
-					resource.TestCheckResourceAttr(resourceName, "child_notification_group_ids.#", "0"),
-					resource.TestCheckResourceAttr(resourceName, "child_channel_ids.#", "0"),
-					resource.TestCheckResourceAttr(resourceName, "monitor.#", "0"),
-					resource.TestCheckResourceAttr(resourceName, "service.#", "0"),
-				),
+				Check:  testAccCheckMackerelNotificationGroupExists(resourceName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("id"), knownvalue.NotNull()),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("name"), knownvalue.StringExact(name)),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("notification_level"), knownvalue.StringExact("all")),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("child_notification_group_ids"), knownvalue.Null()),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("child_channel_ids"), knownvalue.Null()),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("monitor"), knownvalue.SetSizeExact(0)),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("service"), knownvalue.SetSizeExact(0)),
+				},
 			},
 			// Test: Update
 			{
 				Config: testAccMackerelNotificationGroupConfigUpdated(rand, nameUpdated),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckMackerelNotificationGroupExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", nameUpdated),
-					resource.TestCheckResourceAttr(resourceName, "notification_level", "critical"),
-					resource.TestCheckResourceAttr(resourceName, "child_notification_group_ids.#", "1"),
-					resource.TestCheckResourceAttr(resourceName, "child_channel_ids.#", "1"),
-					resource.TestCheckResourceAttr(resourceName, "monitor.#", "1"),
-					resource.TestCheckResourceAttr(resourceName, "service.#", "2"),
-				),
+				Check:  testAccCheckMackerelNotificationGroupExists(resourceName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("id"), knownvalue.NotNull()),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("name"), knownvalue.StringExact(nameUpdated)),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("notification_level"), knownvalue.StringExact("critical")),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("child_notification_group_ids"), knownvalue.SetSizeExact(1)),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("child_channel_ids"), knownvalue.SetSizeExact(1)),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("monitor"),
+						knownvalue.SetExact([]knownvalue.Check{knownvalue.ObjectExact(map[string]knownvalue.Check{
+							"id":           knownvalue.NotNull(),
+							"skip_default": knownvalue.Bool(false),
+						})})),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("service"), knownvalue.SetSizeExact(2)),
+				},
 			},
 			// Test: Import
 			{
